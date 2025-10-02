@@ -4,414 +4,274 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>CTF-Style Networking Quiz</title>
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <meta
+      name="description"
+      content="Interactive self-checking networking quiz with instant feedback."
+    />
     <style>
-      /* Minimal extras */
-      .correct {
-        border-color: #16a34a !important;
-        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
-      }
-      .incorrect {
-        border-color: #dc2626 !important;
-        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
-      }
-      .answer-pill {
-        @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100;
-      }
-      details > summary {
-        list-style: none;
-      }
-      details > summary::-webkit-details-marker {
-        display: none;
-      }
+      .result.ok {
+        color: #16a34a;
+      } /* green-600 */
+      .result.err {
+        color: #dc2626;
+      } /* red-600 */
     </style>
   </head>
-  <body
-    class="min-h-screen bg-gradient-to-b from-slate-50 to-white text-slate-800"
-  >
-    <header class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6">
-      <h1 class="text-3xl md:text-4xl font-bold tracking-tight">
-        CTF‑Style Networking Quiz
-      </h1>
-      <p class="mt-2 text-slate-600">
-        Use your terminal and the internet to answer. Type your answer for each
-        question and click <span class="font-semibold">Check</span>. Toggle a
-        hint if you're stuck. At the bottom, reveal all answers with
-        explanations.
-      </p>
-    </header>
+  <body class="bg-slate-50 text-slate-900">
+    <main class="max-w-3xl mx-auto p-6 space-y-8">
+      <header class="space-y-2">
+        <h1 class="text-3xl font-bold">CTF‑Style Networking Quiz</h1>
+        <p class="text-slate-600">
+          Enter your answers and click
+          <span class="font-semibold">Check</span> for instant feedback. Answers
+          are not case‑sensitive (unless noted).
+        </p>
+      </header>
 
-    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-      <section id="quiz" class="grid grid-cols-1 gap-5"></section>
-
-      <div class="mt-10 flex flex-wrap gap-3">
+      <!-- Controls -->
+      <div class="flex items-center gap-3">
         <button
           id="checkAll"
-          class="px-4 py-2 rounded-xl shadow-sm border bg-white hover:bg-slate-50 active:scale-[.99]"
+          class="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow"
         >
           Check All
         </button>
         <button
-          id="clearAll"
-          class="px-4 py-2 rounded-xl shadow-sm border bg-white hover:bg-slate-50 active:scale-[.99]"
+          id="resetAll"
+          class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 shadow"
         >
-          Clear All
+          Reset
         </button>
-        <button
-          id="revealAll"
-          class="px-4 py-2 rounded-xl shadow border border-transparent bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[.99]"
-        >
-          Reveal All Answers & Explanations
-        </button>
+        <div id="score" class="ml-auto text-sm text-slate-600"></div>
       </div>
 
-      <section id="answers" class="mt-8 hidden">
-        <h2 class="text-2xl font-semibold">All Answers & Explanations</h2>
-        <div id="answerList" class="mt-4 space-y-4"></div>
-      </section>
+      <section id="quiz" class="space-y-6"></section>
+
+      <footer class="pt-8 text-sm text-slate-500">
+        Built for hands‑on networking practice. Tip: try
+        <code class="px-1 py-0.5 bg-slate-200 rounded">nmap</code>,
+        <code class="px-1 py-0.5 bg-slate-200 rounded">dig</code>,
+        <code class="px-1 py-0.5 bg-slate-200 rounded">whois</code>, and
+        <code class="px-1 py-0.5 bg-slate-200 rounded">curl</code>.
+      </footer>
     </main>
 
-    <footer
-      class="border-t bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/50"
-    >
-      <div
-        class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-slate-600"
-      >
-        <p>
-          Built with vanilla HTML/CSS/JS + Tailwind. Questions chosen to have
-          stable answers.
-        </p>
-      </div>
-    </footer>
-
     <script>
-      // Utility: normalize user input for robust matching
-      function norm(s) {
-        return (s || "")
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, " ")
-          .replace(/^port\s+/, "") // allow "port 22" -> "22"
-          .replace(/[,\s]/g, " ")
-          .trim();
-      }
+      // Helpers
+      const normalizeList = (s) => {
+        // Convert to set of numbers (ports) ignoring order & spaces
+        return new Set(
+          (s || "")
+            .split(/[,\s]+/)
+            .filter(Boolean)
+            .map((x) => parseInt(x, 10))
+            .filter((n) => Number.isInteger(n))
+        );
+      };
 
-      function digitsOnly(s) {
-        return (s || "").toString().replace(/[^0-9]/g, "");
-      }
+      const setsEqual = (a, b) =>
+        a.size === b.size && [...a].every((v) => b.has(v));
 
-      // Question bank — each has stable/definitive answers
-      const QUESTIONS = [
-        // Networking Basics
-        {
-          id: "q1_ports_google",
-          prompt: "Networking Basics — What ports are open on google.com?",
-          hint: "Try nmap or an online port scanner.",
-          mode: "portsGoogle",
-          explanation:
-            "Open ports vary by Google frontends and by scanner. We'll accept answers that include common web ports like 80 or 443.",
-        },
-        {
-          id: "q2_ip_openai",
-          prompt: "Networking Basics — What is the IP address of openai.com?",
-          hint: "Use nslookup or dig.",
-          mode: "ipAny",
-          explanation:
-            "openai.com is on a CDN; IPs can change. Any IPv4/IPv6 you resolved counts.",
-        },
-        {
-          id: "q3_owner_8888",
-          prompt:
-            "Networking Basics — If you ping 8.8.8.8, who owns this IP address?",
-          hint: "Try a WHOIS lookup.",
-          answers: ["google", "google llc", "google inc"],
-          explanation: "8.8.8.8 is operated by Google (Google LLC).",
-        },
+      const onlyDigits = (s) => (s || "").replace(/[^0-9]/g, "");
 
-        // Protocols & Ports
-        {
-          id: "q4_ssh_default",
-          prompt: "Protocols & Ports — Which port does SSH normally run on?",
-          hint: 'Research "default SSH port".',
-          answers: ["22"],
-          explanation: "SSH defaults to TCP 22.",
-        },
-        {
-          id: "q4b_ssh_alt",
-          prompt:
-            "Protocols & Ports — Find a public server that runs SSH on a different port. Enter as host:port.",
-          hint: "Port must not be 22.",
-          mode: "sshAlt",
-          explanation:
-            "Many admins move SSH off 22. Any real host:port you find where port != 22 is acceptable.",
-        },
-        {
-          id: "q5_example_status",
-          prompt:
-            "Protocols & Ports — Visit example.com. What HTTP status code does it return?",
-          hint: "Use: curl -I example.com.",
-          answers: ["200", "200 ok", "http/1.1 200 ok", "http/2 200"],
-          explanation: "example.com typically returns HTTP 200 OK.",
-        },
-        {
-          id: "q6_dns_record_to_ip",
-          prompt:
-            "Protocols & Ports — What DNS record type is used to map a domain name to an IP address?",
-          hint: "A, AAAA, CNAME, etc.",
-          answers: ["a", "aaaa", "a record", "aaaa record"],
-          explanation: "A -> IPv4, AAAA -> IPv6. (CNAME maps name to name.)",
-        },
+      const toLower = (s) => (s || "").trim().toLowerCase();
 
-        // Subnets & IPs
-        {
-          id: "q7_net_192_168_1_55_24",
-          prompt:
-            "Subnets & IPs — What’s the network address for 192.168.1.55/24?",
-          hint: "/24 = 255.255.255.0; zero out host bits.",
-          answers: ["192.168.1.0"],
-          explanation: "With /24, the network is 192.168.1.0.",
-        },
-        {
-          id: "q8_hosts_10_0_0_0_8",
-          prompt:
-            "Subnets & IPs — If an IP is 10.0.0.15 with mask /8, how many usable hosts can exist in this subnet?",
-          hint: "2^(host bits) − 2.",
-          answers: ["16777214", "16,777,214"],
-          explanation: "/8 leaves 24 host bits: 2^24 − 2 = 16,777,214.",
-        },
+      const ipRegex = /^\s*(?:\d{1,3}\.){3}\d{1,3}\s*$/;
 
-        // Tools & Analysis
+      // Question bank
+      const questions = [
         {
-          id: "q9_pcap_http_get",
-          prompt:
-            "Tools & Analysis — Download a public PCAP (e.g., Wireshark samples). Can you find one HTTP GET request inside it? Paste one GET line or URL.",
-          hint: "Filter: http.request.method == GET.",
-          mode: "containsGET",
-          explanation: "Provide any HTTP GET you located in the PCAP.",
+          category: "Networking Basics",
+          prompt: "What ports are open on quiz.zyrrel.xyz? (comma-separated)",
+          placeholder: "e.g., 80, 443, 8080, 8443",
+          validator: (input) => {
+            const correct = new Set([80, 443, 8080, 8443]);
+            const user = normalizeList(input);
+            return setsEqual(user, correct);
+          },
+          feedback: {
+            ok: "Correct! Those are the open ports.",
+            err: "Not quite. Enter the exact set of ports (order doesn't matter).",
+          },
         },
         {
-          id: "q10_first_packet_google",
+          category: "DNS / Mail",
           prompt:
-            "Tools & Analysis — First packet captured when opening google.com in Wireshark — what protocol appears first?",
-          hint: "Usually DNS before TLS.",
-          answers: ["dns"],
-          explanation: "Typically a DNS query occurs first (unless cached).",
+            "What is one IP address that the highest priority ProtonMail MX for <code>protonmail.com</code> resolves to?",
+          placeholder: "e.g., 185.70.42.128",
+          validator: (input) => {
+            const ok = new Set([
+              "185.70.42.128",
+              "176.119.200.128",
+              "185.205.70.128",
+            ]);
+            return ok.has((input || "").trim());
+          },
+          feedback: {
+            ok: "Nice! Any one of those IPs is accepted.",
+            err: "That's not one of the accepted IPs for the highest‑priority MX. Try again.",
+          },
         },
-
-        // Fun / OSINT
         {
-          id: "q11_default_gateway",
+          category: "Protocols & HTTP",
           prompt:
-            "Fun/OSINT — What is the default gateway IP for most home routers? (one of them)",
-          hint: "Think 192.168.x.1.",
-          answers: ["192.168.1.1", "192.168.0.1"],
-          explanation: "Common defaults are 192.168.1.1 or 192.168.0.1.",
+            "Visit <code>example.com</code>. What HTTP status code does the server return for <code>/</code>?",
+          placeholder: "e.g., 404",
+          validator: (input) => (input || "").trim() === "404",
+          feedback: {
+            ok: "Correct — 404.",
+            err: "Nope — check with <code>curl -I https://example.com/</code>.",
+          },
         },
         {
-          id: "q12_asn_1111",
+          category: "Service Discovery",
+          prompt: "Find the flag running on host <code>167.99.175.252</code>.",
+          placeholder: "e.g., LZ{...}",
+          validator: (input) =>
+            (input || "").trim() === "LZ{http_on_nonstandard_port_2512}",
+          feedback: {
+            ok: "Correct flag!",
+            err: "Incorrect flag. Keep scanning and enumerating.",
+          },
+        },
+        {
+          category: "Subnets & IPs",
           prompt:
-            "Fun/OSINT — What company owns the ASN (Autonomous System Number) for 1.1.1.1?",
-          hint: "Search 1.1.1.1 ASN.",
-          answers: ["cloudflare"],
-          explanation: "Cloudflare operates 1.1.1.1 (AS13335).",
+            "What’s the broadcast address for <code>192.168.37.197/27</code>?",
+          placeholder: "e.g., 192.168.37.223",
+          validator: (input) => toLower(input) === "192.168.37.223",
+          feedback: {
+            ok: "Correct — 192.168.37.223.",
+            err: "Nope — calculate the /27 block. (Hint: block size is 32 addresses.)",
+          },
+        },
+        {
+          category: "Subnets & IPs",
+          prompt:
+            "If an IP is <code>10.0.0.15</code> with mask <code>/8</code>, how many usable hosts exist in that subnet?",
+          placeholder: "e.g., 16,777,214",
+          validator: (input) => {
+            const digits = onlyDigits(input);
+            return digits === "16777214"; // accept with or without commas/words
+          },
+          feedback: {
+            ok: "Correct — 16,777,214 usable hosts.",
+            err: "Not quite. Remember to subtract network and broadcast from 2^(32-8).",
+          },
+        },
+        {
+          category: "Fun / OSINT",
+          prompt:
+            "A device has IP <code>192.168.23.5/24</code>. What is the most common default gateway IP for home networks in that subnet?",
+          placeholder: "e.g., 192.168.23.1",
+          validator: (input) => toLower(input) === "192.168.23.1",
+          feedback: {
+            ok: "Yep — 192.168.23.1 is the common default gateway format.",
+            err: "Try the typical '.1' gateway for that /24 network.",
+          },
+        },
+        {
+          category: "Routing / ASN",
+          prompt: "Which company owns the ASN for <code>1.1.1.1</code>?",
+          placeholder: "e.g., Cloudflare",
+          validator: (input) => {
+            const s = toLower(input);
+            return s.includes("cloudflare"); // accept "cloudflare" or "cloudflare, inc."
+          },
+          feedback: {
+            ok: "Correct — Cloudflare (AS13335).",
+            err: "Nope — check whois/ASN lookup for 1.1.1.1.",
+          },
         },
       ];
 
-      function buildQuestionCard(q, index) {
+      // Render
+      const quizEl = document.getElementById("quiz");
+
+      questions.forEach((q, i) => {
         const card = document.createElement("article");
-        card.className = "rounded-2xl border bg-white p-5 shadow-sm";
+        card.className =
+          "rounded-2xl bg-white shadow p-5 border border-slate-200";
 
-        const title = document.createElement("h3");
-        title.className = "text-base font-semibold flex items-start gap-2";
-        title.innerHTML = `<span class="text-slate-400">#${
-          index + 1
-        }</span> <span>${q.prompt}</span>`;
+        card.innerHTML = `
+        <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">${
+          q.category
+        }</div>
+        <div class="text-lg font-medium mb-3">${q.prompt}</div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input type="text" class="flex-1 px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="${
+            q.placeholder || ""
+          }" />
+          <div class="flex gap-2">
+            <button class="check px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Check</button>
+            <button class="clear px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300">Clear</button>
+          </div>
+        </div>
+        <div class="result mt-2 text-sm"></div>
+      `;
 
-        const controls = document.createElement("div");
-        controls.className =
-          "mt-3 flex flex-col gap-3 sm:flex-row sm:items-center";
+        quizEl.appendChild(card);
+      });
 
-        const input = document.createElement("input");
-        input.type = "text";
-        input.placeholder = "Type your answer…";
-        input.className =
-          "flex-1 rounded-xl border px-3 py-2 outline-none focus:ring-2 ring-indigo-200";
-        input.id = q.id + "_input";
+      const updateScore = () => {
+        const results = [...document.querySelectorAll(".result")];
+        const correct = results.filter((r) =>
+          r.classList.contains("ok")
+        ).length;
+        document.getElementById(
+          "score"
+        ).textContent = `Score: ${correct}/${questions.length}`;
+      };
 
-        const checkBtn = document.createElement("button");
-        checkBtn.className =
-          "px-3 py-2 rounded-xl border bg-white hover:bg-slate-50";
-        checkBtn.textContent = "Check";
+      // Wire up buttons
+      document.querySelectorAll("#quiz article").forEach((card, idx) => {
+        const input = card.querySelector("input");
+        const checkBtn = card.querySelector("button.check");
+        const clearBtn = card.querySelector("button.clear");
+        const result = card.querySelector(".result");
 
-        const result = document.createElement("div");
-        result.className = "text-sm";
-        result.id = q.id + "_result";
+        const runCheck = () => {
+          const valid = questions[idx].validator(input.value);
+          result.textContent = valid
+            ? questions[idx].feedback.ok
+            : questions[idx].feedback.err;
+          result.classList.remove("ok", "err");
+          result.classList.add(valid ? "ok" : "err");
+          updateScore();
+        };
 
-        const hintWrap = document.createElement("details");
-        hintWrap.className = "mt-2";
-        const hintSummary = document.createElement("summary");
-        hintSummary.className =
-          "cursor-pointer select-none inline-flex items-center gap-2 text-slate-700 hover:text-slate-900";
-        hintSummary.innerHTML =
-          '<span class="inline-block w-5 h-5 rounded-full border flex items-center justify-center">?</span><span class="font-medium">Show hint</span>';
-        const hintBody = document.createElement("div");
-        hintBody.className = "mt-2 text-slate-600";
-        hintBody.textContent = q.hint;
-        hintWrap.appendChild(hintSummary);
-        hintWrap.appendChild(hintBody);
-
-        controls.appendChild(input);
-        controls.appendChild(checkBtn);
-        controls.appendChild(result);
-
-        card.appendChild(title);
-        card.appendChild(controls);
-        card.appendChild(hintWrap);
-
-        // Behavior
-        function check() {
-          const user = input.value.trim();
-          let ok = false;
-          if (!user) {
-            result.textContent = "";
-            input.classList.remove("correct", "incorrect");
-            return;
-          }
-
-          if (q.mode === "portsGoogle") {
-            // Accept if answer mentions common web ports 80 or 443
-            const nums = user.split(/[^0-9]+/).filter(Boolean);
-            ok = nums.includes("80") || nums.includes("443");
-          } else if (q.mode === "ipAny") {
-            // Simple IPv4/IPv6 check without regex literal in replacement
-            const v4 = (s) => {
-              const p = s.split(".");
-              if (p.length !== 4) return false;
-              return p.every((x) => {
-                if (x === "") return false;
-                const n = Number(x);
-                return Number.isInteger(n) && n >= 0 && n <= 255;
-              });
-            };
-            const v6 = (s) => s.includes(":") && s.split(":").length >= 2; // lenient
-            ok = v4(user) || v6(user);
-          } else if (q.mode === "sshAlt") {
-            const i = user.lastIndexOf(":");
-            if (i > 0) {
-              const port = Number(user.slice(i + 1));
-              ok =
-                Number.isInteger(port) &&
-                port !== 22 &&
-                port > 0 &&
-                port < 65536;
-            }
-          } else if (q.mode === "containsGET") {
-            const U = user.toUpperCase();
-            ok = U.includes("GET ");
-          } else if (q.answers) {
-            const uNorm = norm(user);
-            for (const ans of q.answers) {
-              const aNorm = norm(ans);
-              if (
-                digitsOnly(ans).length > 0 &&
-                digitsOnly(ans) === digitsOnly(user)
-              ) {
-                ok = true;
-                break;
-              }
-              if (uNorm === aNorm) {
-                ok = true;
-                break;
-              }
-            }
-          }
-
-          input.classList.remove("correct", "incorrect");
-          if (ok) {
-            input.classList.add("correct");
-            result.className = "text-sm text-green-700";
-            result.textContent = "✓ Correct";
-          } else {
-            input.classList.add("incorrect");
-            result.className = "text-sm text-red-700";
-            result.textContent = "✗ Not quite";
-          }
-        }
-
-        checkBtn.addEventListener("click", check);
+        checkBtn.addEventListener("click", runCheck);
         input.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") check();
+          if (e.key === "Enter") {
+            runCheck();
+          }
         });
-
-        return card;
-      }
-
-      function renderQuiz() {
-        const container = document.getElementById("quiz");
-        container.innerHTML = "";
-        QUESTIONS.forEach((q, idx) => {
-          container.appendChild(buildQuestionCard(q, idx));
+        clearBtn.addEventListener("click", () => {
+          input.value = "";
+          result.textContent = "";
+          result.classList.remove("ok", "err");
+          updateScore();
+          input.focus();
         });
-      }
+      });
 
-      function revealAll() {
-        const ansBox = document.getElementById("answerList");
-        const section = document.getElementById("answers");
-        ansBox.innerHTML = "";
-        QUESTIONS.forEach((q, i) => {
-          const wrap = document.createElement("div");
-          wrap.className = "rounded-xl border bg-white p-4";
-
-          const h = document.createElement("h3");
-          h.className = "font-semibold";
-          h.textContent = `#${i + 1} ${q.prompt}`;
-
-          const best = document.createElement("div");
-          best.className = "mt-2";
-          const acceptable = q.answers
-            .map((a) => `<span class='answer-pill mr-2'>${a}</span>`)
-            .join("");
-          best.innerHTML = `<div class='text-slate-700'>Accepted answer(s):</div><div class='mt-1 flex flex-wrap gap-2'>${acceptable}</div>`;
-
-          const expl = document.createElement("p");
-          expl.className = "mt-2 text-slate-700";
-          expl.textContent = q.explanation;
-
-          wrap.appendChild(h);
-          wrap.appendChild(best);
-          wrap.appendChild(expl);
-          ansBox.appendChild(wrap);
+      document.getElementById("checkAll").addEventListener("click", () => {
+        document.querySelectorAll("#quiz article").forEach((card, idx) => {
+          card.querySelector("button.check").click();
         });
-        section.classList.remove("hidden");
-        section.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      });
 
-      function checkAll() {
-        QUESTIONS.forEach((q) => {
-          const btn = document.getElementById(q.id + "_input");
-          const fakeClick = new Event("keydown");
-          fakeClick.key = "Enter";
-          btn.dispatchEvent(fakeClick);
+      document.getElementById("resetAll").addEventListener("click", () => {
+        document.querySelectorAll("#quiz article").forEach((card) => {
+          card.querySelector("button.clear").click();
         });
-      }
+        document.querySelector("input")?.focus();
+      });
 
-      function clearAll() {
-        QUESTIONS.forEach((q) => {
-          const inp = document.getElementById(q.id + "_input");
-          const res = document.getElementById(q.id + "_result");
-          inp.value = "";
-          inp.classList.remove("correct", "incorrect");
-          res.textContent = "";
-        });
-        document.getElementById("answers").classList.add("hidden");
-      }
-
-      // init
-      renderQuiz();
-      document.getElementById("revealAll").addEventListener("click", revealAll);
-      document.getElementById("checkAll").addEventListener("click", checkAll);
-      document.getElementById("clearAll").addEventListener("click", clearAll);
+      // Initialize score
+      updateScore();
     </script>
   </body>
 </html>
