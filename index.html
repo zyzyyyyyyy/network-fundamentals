@@ -85,7 +85,7 @@
         {
           category: "Networking Basics",
           prompt: "What ports are open on quiz.zyrrel.xyz? (comma-separated)",
-          placeholder: "e.g., 80, 443, 8080, 8443",
+          placeholder: "e.g., 123, 456, 789, 1011",
           validator: (input) => {
             const correct = new Set([80, 443, 8080, 8443]);
             const user = normalizeList(input);
@@ -100,7 +100,7 @@
           category: "DNS / Mail",
           prompt:
             "What is one IP address that the highest priority ProtonMail MX for <code>protonmail.com</code> resolves to?",
-          placeholder: "e.g., 185.70.42.128",
+          placeholder: "e.g., 192.168.1.0",
           validator: (input) => {
             const ok = new Set([
               "185.70.42.128",
@@ -118,7 +118,7 @@
           category: "Protocols & HTTP",
           prompt:
             "Visit <code>example.com</code>. What HTTP status code does the server return for <code>/</code>?",
-          placeholder: "e.g., 404",
+          placeholder: "e.g., ",
           validator: (input) => (input || "").trim() === "404",
           feedback: {
             ok: "Correct — 404.",
@@ -140,7 +140,7 @@
           category: "Subnets & IPs",
           prompt:
             "What’s the broadcast address for <code>192.168.37.197/27</code>?",
-          placeholder: "e.g., 192.168.37.223",
+          placeholder: "e.g., ",
           validator: (input) => toLower(input) === "192.168.37.223",
           feedback: {
             ok: "Correct — 192.168.37.223.",
@@ -151,7 +151,7 @@
           category: "Subnets & IPs",
           prompt:
             "If an IP is <code>10.0.0.15</code> with mask <code>/8</code>, how many usable hosts exist in that subnet?",
-          placeholder: "e.g., 16,777,214",
+          placeholder: "e.g., ",
           validator: (input) => {
             const digits = onlyDigits(input);
             return digits === "16777214"; // accept with or without commas/words
@@ -165,7 +165,7 @@
           category: "Fun / OSINT",
           prompt:
             "A device has IP <code>192.168.23.5/24</code>. What is the most common default gateway IP for home networks in that subnet?",
-          placeholder: "e.g., 192.168.23.1",
+          placeholder: "e.g., ",
           validator: (input) => toLower(input) === "192.168.23.1",
           feedback: {
             ok: "Yep — 192.168.23.1 is the common default gateway format.",
@@ -175,7 +175,7 @@
         {
           category: "Routing / ASN",
           prompt: "Which company owns the ASN for <code>1.1.1.1</code>?",
-          placeholder: "e.g., Cloudflare",
+          placeholder: "e.g., ",
           validator: (input) => {
             const s = toLower(input);
             return s.includes("cloudflare"); // accept "cloudflare" or "cloudflare, inc."
